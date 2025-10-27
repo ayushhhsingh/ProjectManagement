@@ -1,7 +1,8 @@
-import mongoose from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+
 const UserSchema = new Schema(
   {
     username: {
@@ -15,7 +16,7 @@ const UserSchema = new Schema(
       type: String,
       required: true,
       trim: true,
-      lowecase: true,
+      lowercase: true,
       unique: true,
     },
     fullName: {
@@ -28,7 +29,7 @@ const UserSchema = new Schema(
     },
     isEmailVerified: {
       type: Boolean,
-      required: false,
+      default: false,
     },
     refreshToken: {
       type: String,
@@ -36,52 +37,65 @@ const UserSchema = new Schema(
     forgotPasswordToken: {
       type: String,
     },
-    forgotPasswordexpiry: {
+    forgotPasswordExpiry: {
       type: Date,
     },
-    emailVarificationExpiry: {
+    emailVerificationExpiry: {
       type: Date,
     },
-    emailVarificationTOken: {
+    emailVerificationToken: {
       type: String,
+    },
+    role: {
+      type: String,
+      default: "USER",
     },
   },
   {
-    Timestamps: true,
+    timestamps: true,
   }
 );
+
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
+
 UserSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
-// generating access token and refresh token
-(UserSchema.methods.generateAccessToken = function () {
+
+// generating access token
+UserSchema.methods.generateAccessToken = function () {
+  const secret = process.env.ACCESS_TOKEN_SECRET;
+  if (!secret) throw new Error("ACCESS_TOKEN_SECRET is not set");
   return jwt.sign(
     {
-      // payload
       _id: this._id,
       email: this.email,
       username: this.username,
+      role: this.role,
     },
-    process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY }
+    secret,
+    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
   );
-}),
-  (UserSchema.methods.generatingRefreshtoken = function () {
-    return jwt.sign(
-      {
-        _id: this._id,
-        email: this.email,
-      },
-      process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
-    );
-  });
+};
+
+// generating refresh token (correct name)
+UserSchema.methods.generateRefreshToken = function () {
+  const secret = process.env.REFRESH_TOKEN_SECRET;
+  if (!secret) throw new Error("REFRESH_TOKEN_SECRET is not set");
+  return jwt.sign(
+    {
+      _id: this._id,
+      email: this.email,
+    },
+    secret,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d" }
+  );
+};
+
 UserSchema.methods.generateTemporaryToken = function () {
   const unHashed = crypto.randomBytes(20).toString("hex");
 
@@ -90,8 +104,9 @@ UserSchema.methods.generateTemporaryToken = function () {
     .update(unHashed)
     .digest("hex");
 
-  const TokenExpiry = Date.now() + 20 * 60 * 100;
-  return { unHashed, hashedToken, TokenExpiry };
+  // 20 minutes
+  const tokenExpiry = Date.now() + 20 * 60 * 1000;
+  return { unHashed, hashedToken, tokenExpiry };
 };
 
-export const User = mongoose.model("user", UserSchema);
+export const User = mongoose.model("User", UserSchema);
