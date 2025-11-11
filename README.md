@@ -51,6 +51,9 @@ Schemas for Users, Projects, and Tasks
 
 📅 Task deadlines & notifications
 
+THIS PROJECT OS ON HOLD
+
+
 ☁️ File uploads for project documents
 Author
 
